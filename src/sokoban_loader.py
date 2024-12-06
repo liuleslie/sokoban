@@ -66,9 +66,9 @@ def loadLevel(path):
             cellKey = getAverageColor(PILImg,c*colSize,r*rowSize,colSize,rowSize)
             rowKeys.append(cellKey)
             if cellKey not in images:
-                PILImgCrop = PILImg.crop((c*colSize,r*rowSize,(c*colSize)+colSize,(r*rowSize)+rowSize))
-                if cellKey != '-':
-                    images[cellKey] = CMUImage(PILImgCrop)
+                PILImgCrop = PILImg.crop(((c*colSize)+m,(r*rowSize)+m,(c*colSize)+colSize-m,(r*rowSize)+rowSize-m))
+                if cellKey == '-': cellKey = 'nothing'
+                images[cellKey] = CMUImage(PILImgCrop)
         level.append(rowKeys)
     writePickleFile(pickledFileName, (level,images))
     return level,images

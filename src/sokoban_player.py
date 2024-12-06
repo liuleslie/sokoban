@@ -17,6 +17,9 @@ redoMove: use reset() to re-draw moves
 where does useHardcodedLevel go?
 '''
 
+# for grading: just before winning step of level 1
+LEVEL1_ALMOST_MOVES =  [(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (-1, 0), (-1, 0), (0, -1), (-1, 0), (0, 1), (0, 1), (1, 0), (0, 1), (-1, 0), (0, -1), (0, -1), (1, 0), (1, 0), (1, 0), (1, 0), (1, 0), (1, 0), (0, 1), (0, 1), (-1, 0), (-1, 0), (0, -1), (0, 1), (1, 0), (1, 0), (0, -1), (0, -1), (-1, 0), (-1, 0), (-1, 0), (-1, 0), (-1, 0), (0, -1), (-1, 0), (0, 1), (1, 0), (0, 1), (-1, 0), (0, -1), (1, 0), (1, 0), (1, 0), (0, -1), (0, -1), (1, 0), (0, 1), (0, 1), (1, 0), (1, 0), (0, 1), (0, 1), (-1, 0), (-1, 0), (0, -1), (0, 1), (1, 0), (1, 0), (0, -1), (0, -1), (-1, 0), (-1, 0), (-1, 0), (-1, 0), (0, 1), (-1, 0), (-1, 0), (0, -1), (0, -1), (1, 0), (0, 1), (0, 1), (0, -1), (1, 0), (1, 0), (0, -1), (0, -1), (0, -1), (0, -1), (1, 0), (0, 1), (0, 1), (0, 1), (0, 1), (0, -1), (0, -1), (0, -1), (0, -1), (1, 0), (1, 0), (0, 1), (-1, 0), (-1, 0), (0, -1), (-1, 0), (0, 1), (0, 1), (0, 1), (1, 0), (0, 1), (-1, 0), (-1, 0), (-1, 0), (0, -1), (-1, 0), (0, 1), (0, 1), (0, -1), (1, 0), (1, 0), (1, 0), (1, 0), (0, -1), (0, -1), (0, -1), (1, 0), (1, 0), (0, 1), (-1, 0), (-1, 0), (0, -1), (-1, 0), (0, 1), (0, 1), (1, 0), (0, 1), (-1, 0), (-1, 0), (0, 1), (-1, 0), (-1, 0), (0, -1), (0, -1), (1, 0), (0, 1), (1, 0), (1, 0), (1, 0), (1, 0), (1, 0), (0, 1), (0, 1), (-1, 0), (-1, 0), (0, -1), (0, 1), (1, 0), (1, 0), (0, -1), (0, -1), (-1, 0), (-1, 0), (-1, 0), (-1, 0), (-1, 0), (0, -1), (-1, 0)]
+
 COLORS_MAPPED = {
     'r': 'firebrick',
     'g': 'forestgreen',
@@ -37,7 +40,7 @@ COLORS_MAPPED = {
 ###               GAME SETUP
 ################################################
 def onAppStart(app,useHardcodedLevel=False):
-    # canvas, macro structure
+    # canvas
     app.isHardcodedLevel = useHardcodedLevel
     app.width, app.height = 600,600
     app.pdg = app.width * 0.02 # padding
@@ -45,15 +48,13 @@ def onAppStart(app,useHardcodedLevel=False):
     app.availGameWidth, app.availGameHeight = app.width - (2 * app.pdg), app.height - (app.pdg * 2) - app.gameInfoHeight
 
     # game
-    app.levelNum = 1
     loadLevelMode = None if useHardcodedLevel else getLevel(app) # 0 should be path.
     app.level, app.images = loadLevel(loadLevelMode) # initial board, images to draw
     app.pMoves = []
+    app.undoneMove = (None, None)
     app.undoMove = False
     app.redoMove = False
     resetLevel(app)
-
-# will need to call loadLevel() to get level as 2d list and images
 
 def getLevel(app,levelNum=1):
     if 1 <= levelNum <= 4:
@@ -80,10 +81,8 @@ def resetLevel(app):
 
     # player
     app.pSize = app.cellSize * 0.5
-    # app.pMoves = []
-    app.wins = 0
+    app.pWon = False
 
-    print('\n' * 10)
 
 def setupLevel(app):
     gameBoard, gameTargets = [(['-'] * app.numCols) for row in range(app.numRows)], [(['-'] * app.numCols) for row in range(app.numRows)]
@@ -114,24 +113,35 @@ def onStep(app):
     app.counter += 1
 
 def onKeyPress(app,key):
-    if key == 'h': app.isHardcodedLevel = not app.isHardcodedLevel
+    if not app.gameOver:
+        if key == 'h': app.isHardcodedLevel = not app.isHardcodedLevel
+        if key == 'u' and len(app.pMoves) > 0: undoMove(app)
+        if key == 'i' and app.undoneMove != (None, None): pass # SOMETHING
+        if key == 'a' and app.levelNum == 1: # hardcoded jump to almost solution for grading
+            resetLevel(app)
+            app.pMoves = LEVEL1_ALMOST_MOVES
+            for move in app.pMoves:
+                makeMove(app,*move)
+        
+        else:
+            if key in 'up down left right'.split():
+                dRow,dCol = 0,0
+                if key == 'up': dRow -= 1
+                if key == 'down': dRow += 1 # elif?
+                if key == 'left': dCol -= 1
+                if key == 'right': dCol += 1
+                if canMove(app,dRow,dCol) and (dRow,dCol) != (0,0):
+                    makeMove(app,dRow,dCol)
+                    app.pMoves.append((dRow,dCol)) # update player moves
+    
     if key == 'r': resetLevel(app)
-    if key == 'u' and len(app.pMoves) > 0: undoMove(app)
     if key in '1234':
         getLevel(app,int(key))
-    elif key in 'up down left right'.split():
-        dRow,dCol = 0,0
-        if key == 'up': dRow -= 1
-        if key == 'down': dRow += 1 # elif?
-        if key == 'left': dCol -= 1
-        if key == 'right': dCol += 1
-        if canMove(app,dRow,dCol) and (dRow,dCol) != (0,0):
-            makeMove(app,dRow,dCol)
-            app.pMoves.append((dRow,dCol)) # update player moves
+        print(f'curr level is {app.levelNum}')
     
     if checkForWin(app):
         app.gameOver = True
-        app.wins += 1
+        app.pWon = True
 
 def onKeyRelease(app,key):
     if key == 'r': app.pMoves = [] # is this hacky?
@@ -160,7 +170,7 @@ def makeMove(app,dRow,dCol):
         app.gameBoard[app.pRow][app.pCol] = '-'        
 
 def undoMove(app):
-    app.pMoves.pop()
+    app.undoneMove = app.pMoves.pop()
     resetLevel(app)
     for move in app.pMoves:
         makeMove(app,*move)
@@ -180,8 +190,12 @@ def checkForWin(app):
 ################################################
 
 def redrawAll(app):
+    # if not app.gameOver:
     drawGameInfo(app) # draw header/game info text
     drawGame(app) # draw game: board, pieces
+    if app.pWon: 
+        drawRect(0,0,app.width,app.height,fill='black',opacity=75)
+        drawLabel('player won! restart or something',app.width//2,app.height//2,fill='white')
 
 def drawGame(app):
     drawRect(app.pdg, app.gameInfoHeight, app.availGameWidth, app.availGameHeight, fill='whitesmoke')
@@ -189,15 +203,19 @@ def drawGame(app):
     category, key = '', ''
     for row in range(app.numRows):
         for col in range(app.numCols):
-            # hardcoded: draw filled colors
-            if app.gameBoard[row][col] != '-':
-                category = 'board'
+            if app.gameTargets[row][col] != '-' and app.gameBoard[row][col] == '-':
+                    category = 'target'
+                    key = app.gameTargets[row][col]
+            elif app.gameBoard[row][col] != '-':
                 key = app.gameBoard[row][col]
-            elif app.gameTargets[row][col] != '-':
-                category = 'target'
-                key = app.gameTargets[row][col]
+                # if app.gameBoard[row][col] == 'w':
+                #     category = 'wall'
+                # else:
+                category = 'board'
             else:
-                category = 'wall'
+                category = 'nothing'
+            
+
             drawCell(app,app.bTopLeftX + (col * app.cellSize), app.bTopLeftY + (row * app.cellSize), app.cellSize, category, key)
     drawCell(app,app.bTopLeftX + (app.pCol * app.cellSize), app.bTopLeftY + (app.pRow * app.cellSize), app.cellSize, category='player', key='p')
 
@@ -210,7 +228,9 @@ def drawCell(app,topLeftX, topLeftY, size, category, key):
         tgtSz = size * 0.5
         if app.isHardcodedLevel: drawCircle(topLeftX + (size//2), topLeftY + (size//2), tgtSz * 0.5, fill=None, border=COLORS_MAPPED[f'd{key}'], borderWidth=8, align='center')   
     if not app.isHardcodedLevel:
-        if key != '' and key != '-':
+        if category == 'nothing':
+            drawRect(topLeftX,topLeftY,size,size,fill='white')
+        else: # if key != '' and key != '-':
             if category == 'target': key = key.upper()
             drawImage(app.images[key],topLeftX, topLeftY,width=size,height=size)
 
