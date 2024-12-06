@@ -2,13 +2,13 @@
 #   main sokoban game.
 # Leslie Liu / leslieli / Section Q
 
-
 from cmu_graphics import *
 from sokoban_loader import *
 import os, pathlib, random, time
 
-# thanks to SubspaceAudio on OpenGameArt.org for the public domain 8-bit game sounds!
-# https://opengameart.org/content/512-sound-effects-8-bit-style
+''' thanks to Juhani Junkala (SubspaceAudio on OpenGameArt.org) 
+for the public domain 8-bit game sounds:
+https://opengameart.org/content/512-sound-effects-8-bit-style '''
 
 # for grading: just before winning step of level 1
 LEVEL1_ALMOST_MOVES =  [(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (-1, 0), (-1, 0), (0, -1), (-1, 0), (0, 1), (0, 1), (1, 0), (0, 1), (-1, 0), (0, -1), (0, -1), (1, 0), (1, 0), (1, 0), (1, 0), (1, 0), (1, 0), (0, 1), (0, 1), (-1, 0), (-1, 0), (0, -1), (0, 1), (1, 0), (1, 0), (0, -1), (0, -1), (-1, 0), (-1, 0), (-1, 0), (-1, 0), (-1, 0), (0, -1), (-1, 0), (0, 1), (1, 0), (0, 1), (-1, 0), (0, -1), (1, 0), (1, 0), (1, 0), (0, -1), (0, -1), (1, 0), (0, 1), (0, 1), (1, 0), (1, 0), (0, 1), (0, 1), (-1, 0), (-1, 0), (0, -1), (0, 1), (1, 0), (1, 0), (0, -1), (0, -1), (-1, 0), (-1, 0), (-1, 0), (-1, 0), (0, 1), (-1, 0), (-1, 0), (0, -1), (0, -1), (1, 0), (0, 1), (0, 1), (0, -1), (1, 0), (1, 0), (0, -1), (0, -1), (0, -1), (0, -1), (1, 0), (0, 1), (0, 1), (0, 1), (0, 1), (0, -1), (0, -1), (0, -1), (0, -1), (1, 0), (1, 0), (0, 1), (-1, 0), (-1, 0), (0, -1), (-1, 0), (0, 1), (0, 1), (0, 1), (1, 0), (0, 1), (-1, 0), (-1, 0), (-1, 0), (0, -1), (-1, 0), (0, 1), (0, 1), (0, -1), (1, 0), (1, 0), (1, 0), (1, 0), (0, -1), (0, -1), (0, -1), (1, 0), (1, 0), (0, 1), (-1, 0), (-1, 0), (0, -1), (-1, 0), (0, 1), (0, 1), (1, 0), (0, 1), (-1, 0), (-1, 0), (0, 1), (-1, 0), (-1, 0), (0, -1), (0, -1), (1, 0), (0, 1), (1, 0), (1, 0), (1, 0), (1, 0), (1, 0), (0, 1), (0, 1), (-1, 0), (-1, 0), (0, -1), (0, 1), (1, 0), (1, 0), (0, -1), (0, -1), (-1, 0), (-1, 0), (-1, 0), (-1, 0), (-1, 0), (0, -1), (-1, 0)]
@@ -31,7 +31,7 @@ COLORS_MAPPED = {
 } 
 
 SFX_URL = {
-    'cantMove' : {'sfx/cantMove.wav'},
+    'cantMove' : {'sfx/cantMove1.wav','sfx/cantMove2.wav'},
     'moveIntoEmptyCell' : {'sfx/move1.wav', 'sfx/move2.wav'},
     'moveBox' : {'sfx/moveBox1.wav', 'sfx/moveBox2.wav'},
     'overTarget' : {'sfx/overTarget1.wav', 'sfx/overTarget2.wav'},
@@ -63,6 +63,8 @@ def onAppStart(app,useHardcodedLevel=False):
     app.undoMove = False
     app.redoMove = False
     resetLevel(app,'full')
+    app.sisyphus = False
+    app.unpushBox = False
 
     # sound effects
     loadSoundEffects(app)
@@ -98,6 +100,7 @@ def resetLevel(app,mode='full'):
 
     app.numRows, app.numCols = len(app.level), len(app.level[0])
     app.gameBoard, app.gameTargets, app.pRow, app.pCol = setupLevel(app)
+    app.origPRow, app.origPCol = app.pRow, app.pCol
 
     # canvas: drawing the board (game)
     app.bTopLeftX, app.bTopLeftY = app.pdg, app.gameInfoHeight + (app.pdg)
@@ -137,15 +140,16 @@ def setupLevel(app):
 ################################################
 
 def onStep(app):
-    if not app.gameOver: app.counter += 1
+    if not app.gameOver and not app.paused: app.counter += 1
 
 def onKeyPress(app,key):
     if not app.gameOver: # player can still move around when game is not over
         if key == 'v': app.isHardcodedLevel = not app.isHardcodedLevel
+        # if key == 's': app.sisyphus = not app.sisyphus
         if key == 'u' and len(app.pMoves) > 0: undoMove(app)
         if key == 'y' and app.undoneMoves != []: redoMove(app) # SOMETHING
         if key == 'a' and app.levelNum == 1: # hardcoded jump to almost solution for grading
-            makeAlmostMoves(app)
+            makeAlmostMoves(app) # this only works on the first try
         else:
             if key in 'up down left right'.split():
                 dRow,dCol = 0,0
@@ -153,11 +157,17 @@ def onKeyPress(app,key):
                 if key == 'down': dRow += 1 # elif?
                 if key == 'left': dCol -= 1
                 if key == 'right': dCol += 1
+
                 if canMove(app,dRow,dCol) and (dRow,dCol) != (0,0):
                     makeMove(app,dRow,dCol)
+                    # if app.sisyphus and pushedBox(app,dRow,dCol):
+                    #     print('should return')
+                    #     app.pRow, app.pCol = app.origPRow, app.origPCol
                     app.pMoves.append((dRow,dCol)) # update player moves
+                
                 else:
                     playSfx(app,'cantMove')
+            # if app.sisyphus: app.pMoves = []
     
     # these game controls are accessible regardless of game over state
     if key == 'space': app.paused = not app.paused
@@ -177,6 +187,11 @@ def onKeyPress(app,key):
         app.pWonTime = getTimerInfo(app)
         time.sleep(0.2) # slight delay applied
         playSfx(app,'playerWins')
+
+def pushedBox(app,dRow,dCol):
+    tentativeRow, tentativeCol = app.pRow + dRow, app.pCol + dCol
+    tentativeNextRow, tentativeNextCol = tentativeRow + dRow, tentativeCol + dCol
+    return isBox(app, tentativeRow, tentativeCol) and isBox(app, tentativeNextRow, tentativeNextCol)
 
 def onKeyRelease(app,key):
     if key == 'r': app.pMoves = [] # clearing moves here to allow for access to moves if undoing
@@ -365,6 +380,11 @@ def drawControlsInfo(app):
     viewMode = 'SHAPES' if app.isHardcodedLevel else 'DUDE'
     viewInfo = f'[v] GRAPHICS: {viewMode}'
     drawButton(buttonX,buttonY,viewButtonW,buttonH,viewInfo)
+    # toil = 'NEVERENDING' if app.sisyphus else 'STANDARD'
+    # buttonY += buttonH * 1.2
+    # toilButtonW = audioButtonW
+    # drawButton(buttonX,buttonY,toilButtonW,buttonH,toil)
+    ''' scrapping the sisyphean mod for now... '''
 
 def drawButton(x,y,w,h,buttonLabel):
     pdg = w * 0.05
