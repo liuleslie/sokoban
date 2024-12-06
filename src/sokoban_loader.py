@@ -167,7 +167,6 @@ def testSokobanLoader():
         file = files[i]
         correctLevel = correctLevels[i]
         level, images = loadLevel(file)
-        print(images)
         if level != correctLevel:
             print(f'{file} is incorrect!')
             print('Correct result:')
